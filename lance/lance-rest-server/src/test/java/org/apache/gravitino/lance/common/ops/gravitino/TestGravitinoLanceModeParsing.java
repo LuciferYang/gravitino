@@ -212,7 +212,10 @@ class TestGravitinoLanceModeParsing {
                 "us-west-2"));
     when(table.columns()).thenReturn(new Column[0]);
     when(tableCatalog.loadTable(any(NameIdentifier.class))).thenReturn(table);
-    GravitinoLanceTableOperations operations = newTableOperations(tableCatalog);
+    GravitinoLanceTableOperations operations = Mockito.spy(newTableOperations(tableCatalog));
+    Mockito.doThrow(new RuntimeException("dataset not found"))
+        .when(operations)
+        .openDataset("/tmp/table", Map.of("region", "us-west-2"));
 
     DescribeTableResponse response =
         operations.describeTable("catalog.schema.table", ".", Optional.empty(), true);

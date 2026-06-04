@@ -38,6 +38,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+import org.apache.arrow.memory.RootAllocator;
 import org.apache.arrow.vector.types.pojo.Field;
 import org.apache.gravitino.Catalog;
 import org.apache.gravitino.NameIdentifier;
@@ -50,6 +51,8 @@ import org.apache.gravitino.lance.common.utils.LancePropertiesUtils;
 import org.apache.gravitino.rel.Column;
 import org.apache.gravitino.rel.Table;
 import org.apache.gravitino.rel.TableChange;
+import org.lance.Dataset;
+import org.lance.ReadOptions;
 import org.lance.namespace.errors.TableNotFoundException;
 import org.lance.namespace.model.AlterTableAlterColumnsRequest;
 import org.lance.namespace.model.AlterTableDropColumnsRequest;
@@ -122,21 +125,23 @@ public class GravitinoLanceTableOperations implements LanceTableOperations {
       throw new TableNotFoundException(
           "Table not found: " + tableId, CommonUtil.formatCurrentStackTrace(), tableId);
     }
+    Map<String, String> tableProperties = table.properties();
+    Map<String, String> storageOptions =
+        LancePropertiesUtils.resolveLanceStorageOptions(catalog.properties(), tableProperties);
+
     DescribeTableResponse response = new DescribeTableResponse();
-    response.setMetadata(table.properties());
-    response.setProperties(table.properties());
-    response.setLocation(table.properties().get(LANCE_LOCATION));
+    response.setMetadata(tableProperties);
+    response.setProperties(tableProperties);
+    response.setLocation(tableProperties.get(LANCE_LOCATION));
     response.setSchema(toJsonArrowSchema(table.columns()));
     response.setVersion(
-        Optional.ofNullable(table.properties().get(LANCE_TABLE_VERSION))
+        Optional.ofNullable(tableProperties.get(LANCE_TABLE_VERSION))
             .map(Long::valueOf)
             .orElse(null));
-    response.setStorageOptions(
-        LancePropertiesUtils.resolveLanceStorageOptions(catalog.properties(), table.properties()));
+    response.setStorageOptions(storageOptions);
     response.setManagedVersioning(false);
     if (checkDeclared) {
-      response.setIsOnlyDeclared(
-          Boolean.parseBoolean(table.properties().getOrDefault(LANCE_TABLE_DECLARED, "false")));
+      response.setIsOnlyDeclared(isOnlyDeclared(table.name(), tableProperties, storageOptions));
     }
     return response;
   }
@@ -383,6 +388,37 @@ public class GravitinoLanceTableOperations implements LanceTableOperations {
 
     return JsonArrowSchemaConverter.convertToJsonArrowSchema(
         new org.apache.arrow.vector.types.pojo.Schema(fields));
+  }
+
+  boolean isOnlyDeclared(
+      String tableName, Map<String, String> tableProperties, Map<String, String> storageOptions) {
+    if (!Boolean.parseBoolean(tableProperties.getOrDefault(LANCE_TABLE_DECLARED, "false"))) {
+      return false;
+    }
+
+    String location = tableProperties.get(LANCE_LOCATION);
+    if (location == null || location.isEmpty()) {
+      return true;
+    }
+
+    try (Dataset ignored = openDataset(location, storageOptions)) {
+      return false;
+    } catch (RuntimeException e) {
+      LOG.debug(
+          "Treat Lance table {} as declared-only because dataset cannot be opened at location {}",
+          tableName,
+          location,
+          e);
+      return true;
+    }
+  }
+
+  Dataset openDataset(String location, Map<String, String> storageOptions) {
+    return Dataset.open()
+        .allocator(new RootAllocator())
+        .uri(location)
+        .readOptions(new ReadOptions.Builder().setStorageOptions(storageOptions).build())
+        .build();
   }
 
   private static String normalizeCreateMode(String mode, String tableId) {
