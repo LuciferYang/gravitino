@@ -21,23 +21,80 @@ package org.apache.gravitino.lance.common.ops.gravitino;
 import static org.apache.gravitino.lance.common.utils.LanceConstants.LANCE_LOCATION;
 import static org.apache.gravitino.lance.common.utils.LanceConstants.LANCE_TABLE_DECLARED;
 
+import java.io.IOException;
 import java.util.Map;
+import org.apache.arrow.memory.BufferAllocator;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.lance.Dataset;
 
 public class TestGravitinoLanceTableOperations {
 
+  // Mirrors the real lance-core message for a dataset whose files do not exist yet.
+  private static final String DATASET_ABSENT_MESSAGE =
+      "Dataset at path /tmp/table was not found: Not found: /tmp/table/_versions";
+
   @Test
-  public void testDeclaredTableStaysDeclaredOnlyWhenDatasetCannotBeOpened() {
+  public void testDeclaredTableStaysDeclaredOnlyWhenDatasetIsAbsent() {
     TestableGravitinoLanceTableOperations operations =
-        new TestableGravitinoLanceTableOperations(new RuntimeException("dataset not found"));
+        new TestableGravitinoLanceTableOperations(
+            new IllegalArgumentException(DATASET_ABSENT_MESSAGE));
 
     boolean isOnlyDeclared =
         operations.isOnlyDeclared(
             "table", Map.of(LANCE_LOCATION, "/tmp/table", LANCE_TABLE_DECLARED, "true"), Map.of());
 
     Assertions.assertTrue(isOnlyDeclared);
+    Assertions.assertTrue(operations.openDatasetCalled);
+  }
+
+  @Test
+  public void testDeclaredTableReportedMaterializedOnTransientError() {
+    TestableGravitinoLanceTableOperations operations =
+        new TestableGravitinoLanceTableOperations(
+            new RuntimeException("LanceError(IO): Generic S3 error: throttled (503 SlowDown)"));
+
+    boolean isOnlyDeclared =
+        operations.isOnlyDeclared(
+            "table", Map.of(LANCE_LOCATION, "/tmp/table", LANCE_TABLE_DECLARED, "true"), Map.of());
+
+    // A transient failure must not be reported as declared-only, to avoid a destructive overwrite.
+    Assertions.assertFalse(isOnlyDeclared);
+    Assertions.assertTrue(operations.openDatasetCalled);
+  }
+
+  @Test
+  public void testDeclaredTableReportedMaterializedWhenOpenThrowsCheckedIoException() {
+    // Object stores surface failures as a (native, undeclared) checked IOException; it must be
+    // caught and classified, not propagated out of describeTable.
+    TestableGravitinoLanceTableOperations operations =
+        new TestableGravitinoLanceTableOperations(
+            new IOException("LanceError(IO): Generic S3 error: connection timed out"));
+
+    boolean isOnlyDeclared =
+        operations.isOnlyDeclared(
+            "table", Map.of(LANCE_LOCATION, "/tmp/table", LANCE_TABLE_DECLARED, "true"), Map.of());
+
+    Assertions.assertFalse(isOnlyDeclared);
+    Assertions.assertTrue(operations.openDatasetCalled);
+  }
+
+  @Test
+  public void testStorageLevelNotFoundIsTreatedAsMaterialized() {
+    // A storage-level "bucket not found" is ambiguous (genuine absence vs. misconfiguration), so
+    // it is conservatively treated as materialized; only Lance's dataset-level "was not found"
+    // signal flips a table to declared-only.
+    TestableGravitinoLanceTableOperations operations =
+        new TestableGravitinoLanceTableOperations(
+            new IOException("LanceError(IO): Generic S3 error: Bucket 'b' not found"));
+
+    boolean isOnlyDeclared =
+        operations.isOnlyDeclared(
+            "table",
+            Map.of(LANCE_LOCATION, "s3://b/t.lance", LANCE_TABLE_DECLARED, "true"),
+            Map.of());
+
+    Assertions.assertFalse(isOnlyDeclared);
     Assertions.assertTrue(operations.openDatasetCalled);
   }
 
@@ -70,26 +127,58 @@ public class TestGravitinoLanceTableOperations {
     Assertions.assertFalse(operations.openDatasetCalled);
   }
 
+  @Test
+  public void testDeclaredTableWithoutLocationIsDeclaredOnlyWithoutProbing() {
+    TestableGravitinoLanceTableOperations operations =
+        new TestableGravitinoLanceTableOperations(null);
+
+    boolean isOnlyDeclared =
+        operations.isOnlyDeclared("table", Map.of(LANCE_TABLE_DECLARED, "true"), Map.of());
+
+    Assertions.assertTrue(isOnlyDeclared);
+    Assertions.assertFalse(operations.openDatasetCalled);
+  }
+
+  @Test
+  public void testDeclaredTableWithEmptyLocationIsDeclaredOnlyWithoutProbing() {
+    TestableGravitinoLanceTableOperations operations =
+        new TestableGravitinoLanceTableOperations(null);
+
+    boolean isOnlyDeclared =
+        operations.isOnlyDeclared(
+            "table", Map.of(LANCE_TABLE_DECLARED, "true", LANCE_LOCATION, ""), Map.of());
+
+    Assertions.assertTrue(isOnlyDeclared);
+    Assertions.assertFalse(operations.openDatasetCalled);
+  }
+
   private static class TestableGravitinoLanceTableOperations extends GravitinoLanceTableOperations {
-    private final RuntimeException openDatasetException;
+    private final Exception openDatasetException;
     private boolean openDatasetCalled;
     private String openedLocation;
     private Map<String, String> openedStorageOptions;
 
-    TestableGravitinoLanceTableOperations(RuntimeException openDatasetException) {
+    TestableGravitinoLanceTableOperations(Exception openDatasetException) {
       super(null);
       this.openDatasetException = openDatasetException;
     }
 
     @Override
-    Dataset openDataset(String location, Map<String, String> storageOptions) {
+    Dataset openDataset(
+        BufferAllocator allocator, String location, Map<String, String> storageOptions) {
       openDatasetCalled = true;
       openedLocation = location;
       openedStorageOptions = storageOptions;
       if (openDatasetException != null) {
-        throw openDatasetException;
+        // Reproduce lance, whose native open can throw an undeclared checked exception.
+        sneakyThrow(openDatasetException);
       }
       return null;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static <T extends Throwable> void sneakyThrow(Throwable t) throws T {
+      throw (T) t;
     }
   }
 }

@@ -25,12 +25,14 @@ import static org.apache.gravitino.lance.common.utils.LanceConstants.LANCE_TABLE
 import static org.apache.gravitino.lance.common.utils.LanceConstants.LANCE_TABLE_VERSION;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyMap;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.when;
 
 import java.util.Map;
 import java.util.Optional;
 import java.util.regex.Pattern;
+import org.apache.arrow.memory.BufferAllocator;
 import org.apache.gravitino.Catalog;
 import org.apache.gravitino.NameIdentifier;
 import org.apache.gravitino.rel.Column;
@@ -213,9 +215,12 @@ class TestGravitinoLanceModeParsing {
     when(table.columns()).thenReturn(new Column[0]);
     when(tableCatalog.loadTable(any(NameIdentifier.class))).thenReturn(table);
     GravitinoLanceTableOperations operations = Mockito.spy(newTableOperations(tableCatalog));
-    Mockito.doThrow(new RuntimeException("dataset not found"))
+    Mockito.doThrow(
+            new IllegalArgumentException(
+                "Dataset at path /tmp/table was not found: Not found: /tmp/table/_versions"))
         .when(operations)
-        .openDataset("/tmp/table", Map.of("region", "us-west-2"));
+        .openDataset(
+            any(BufferAllocator.class), eq("/tmp/table"), eq(Map.of("region", "us-west-2")));
 
     DescribeTableResponse response =
         operations.describeTable("catalog.schema.table", ".", Optional.empty(), true);
@@ -224,6 +229,52 @@ class TestGravitinoLanceModeParsing {
     Assertions.assertEquals(Boolean.FALSE, response.getManagedVersioning());
     Assertions.assertEquals("true", response.getProperties().get(LANCE_TABLE_DECLARED));
     Assertions.assertEquals("us-west-2", response.getStorageOptions().get("region"));
+  }
+
+  @Test
+  void testDescribeTableSkipsDeclaredProbeWhenNotRequested() {
+    TableCatalog tableCatalog = Mockito.mock(TableCatalog.class);
+    Table table = Mockito.mock(Table.class);
+    when(table.properties())
+        .thenReturn(Map.of(LANCE_LOCATION, "/tmp/table", LANCE_TABLE_DECLARED, "true"));
+    when(table.columns()).thenReturn(new Column[0]);
+    when(tableCatalog.loadTable(any(NameIdentifier.class))).thenReturn(table);
+    GravitinoLanceTableOperations operations = Mockito.spy(newTableOperations(tableCatalog));
+
+    DescribeTableResponse response =
+        operations.describeTable("catalog.schema.table", ".", Optional.empty(), false);
+
+    Assertions.assertNull(response.getIsOnlyDeclared());
+    Mockito.verify(operations, Mockito.never())
+        .openDataset(any(BufferAllocator.class), any(), anyMap());
+  }
+
+  @Test
+  void testDescribeTableReportsMaterializedOnTransientProbeError() {
+    TableCatalog tableCatalog = Mockito.mock(TableCatalog.class);
+    Table table = Mockito.mock(Table.class);
+    when(table.properties())
+        .thenReturn(
+            Map.of(
+                LANCE_LOCATION,
+                "/tmp/table",
+                LANCE_TABLE_DECLARED,
+                "true",
+                LANCE_STORAGE_OPTIONS_PREFIX + "region",
+                "us-west-2"));
+    when(table.columns()).thenReturn(new Column[0]);
+    when(tableCatalog.loadTable(any(NameIdentifier.class))).thenReturn(table);
+    GravitinoLanceTableOperations operations = Mockito.spy(newTableOperations(tableCatalog));
+    Mockito.doThrow(
+            new RuntimeException("LanceError(IO): Generic S3 error: throttled (503 SlowDown)"))
+        .when(operations)
+        .openDataset(
+            any(BufferAllocator.class), eq("/tmp/table"), eq(Map.of("region", "us-west-2")));
+
+    DescribeTableResponse response =
+        operations.describeTable("catalog.schema.table", ".", Optional.empty(), true);
+
+    Assertions.assertEquals(Boolean.FALSE, response.getIsOnlyDeclared());
   }
 
   private static GravitinoLanceTableOperations newTableOperations(TableCatalog tableCatalog) {

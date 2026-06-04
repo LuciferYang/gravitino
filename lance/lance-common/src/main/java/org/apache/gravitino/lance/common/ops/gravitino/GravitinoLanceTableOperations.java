@@ -34,10 +34,12 @@ import com.google.common.collect.Maps;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+import org.apache.arrow.memory.BufferAllocator;
 import org.apache.arrow.memory.RootAllocator;
 import org.apache.arrow.vector.types.pojo.Field;
 import org.apache.gravitino.Catalog;
@@ -401,24 +403,64 @@ public class GravitinoLanceTableOperations implements LanceTableOperations {
       return true;
     }
 
-    try (Dataset ignored = openDataset(location, storageOptions)) {
+    // Own the allocator here so it is always closed, whether opening the dataset succeeds or
+    // throws. Lance does not close a caller-supplied allocator on Dataset.close().
+    //
+    // The probe is advisory, so it must never break describeTable: catch every failure. Lance
+    // exposes no typed "dataset absent" error, and opening an object store can even surface an
+    // (undeclared) checked IOException, so we classify by message. Only a clear "dataset absent"
+    // failure keeps the table declared-only; any other failure (transient I/O, throttling,
+    // credentials) is reported as materialized, because wrongly reporting a materialized table as
+    // declared-only could let a client overwrite it.
+    try (BufferAllocator allocator = new RootAllocator();
+        Dataset ignored = openDataset(allocator, location, storageOptions)) {
       return false;
-    } catch (RuntimeException e) {
-      LOG.debug(
-          "Treat Lance table {} as declared-only because dataset cannot be opened at location {}",
+    } catch (Exception e) {
+      if (indicatesDatasetAbsent(e)) {
+        LOG.debug(
+            "Treat Lance table {} as declared-only because its dataset is absent at location {}",
+            tableName,
+            location,
+            e);
+        return true;
+      }
+      LOG.warn(
+          "Could not determine whether Lance table {} is materialized at location {}; reporting it "
+              + "as materialized to avoid a destructive declared-only result",
           tableName,
           location,
           e);
-      return true;
+      return false;
     }
   }
 
-  Dataset openDataset(String location, Map<String, String> storageOptions) {
+  Dataset openDataset(
+      BufferAllocator allocator, String location, Map<String, String> storageOptions) {
     return Dataset.open()
-        .allocator(new RootAllocator())
+        .allocator(allocator)
         .uri(location)
         .readOptions(new ReadOptions.Builder().setStorageOptions(storageOptions).build())
         .build();
+  }
+
+  /**
+   * Returns whether the failure clearly indicates the Lance dataset itself does not exist (so the
+   * table is still only declared). Lance exposes no typed exception for this, so it is detected
+   * from its dataset-level message ("Dataset at path ... was not found"), which is emitted the same
+   * way for local and object-store locations once the storage is reachable. Any other failure --
+   * transient I/O, throttling, credentials, or even a storage-level "bucket not found" -- is
+   * deliberately treated as "not absent" so a materialized table is never reported as declared-only
+   * (which could let a client overwrite it). Recognizing those broader cases would require looser
+   * matching that risks misclassifying transient errors, so this stays conservative.
+   */
+  private static boolean indicatesDatasetAbsent(Throwable error) {
+    for (Throwable cause = error; cause != null; cause = cause.getCause()) {
+      String message = cause.getMessage();
+      if (message != null && message.toLowerCase(Locale.ROOT).contains("was not found")) {
+        return true;
+      }
+    }
+    return false;
   }
 
   private static String normalizeCreateMode(String mode, String tableId) {
