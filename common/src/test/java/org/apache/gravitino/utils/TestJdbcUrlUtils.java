@@ -82,7 +82,7 @@ public class TestJdbcUrlUtils {
                 JdbcUrlUtils.validateJdbcConfig(
                     "testDriver",
                     "jdbc:mysql://localhost:0000/test",
-                    Collections.singletonMap("maxAllowedPacket", "maxAllowedPacket")));
+                    Collections.singletonMap("maxAllowedPacket", "true")));
     Assertions.assertEquals(
         "Unsafe MySQL parameter 'maxAllowedPacket' detected in JDBC URL", gre.getMessage());
   }
@@ -133,6 +133,77 @@ public class TestJdbcUrlUtils {
                     Collections.singletonMap("test", "test")));
     Assertions.assertEquals(
         "Unsafe PostgreSQL parameter 'socketFactory' detected in JDBC URL", gre.getMessage());
+  }
+
+  @Test
+  public void whenUnsafeParamSuppliedAsConfigKey_ShouldThrowGravitinoRuntimeException() {
+    // The unsafe parameter is supplied only as a config-map key, with an innocuous value and a URL
+    // that never mentions it. Config keys are applied to the connection as driver properties, so
+    // the guard must inspect keys, not just the URL and values.
+    GravitinoRuntimeException gre =
+        Assertions.assertThrows(
+            GravitinoRuntimeException.class,
+            () ->
+                JdbcUrlUtils.validateJdbcConfig(
+                    "testDriver",
+                    "jdbc:mysql://localhost:0000/test",
+                    Collections.singletonMap("autoDeserialize", "true")));
+    Assertions.assertEquals(
+        "Unsafe MySQL parameter 'autoDeserialize' detected in JDBC URL", gre.getMessage());
+  }
+
+  @Test
+  public void whenUnsafeParamConfigKeyHasDifferentCase_ShouldThrowGravitinoRuntimeException() {
+    // Keys are matched case-insensitively, so re-casing an unsafe parameter (here SocketFactory
+    // for socketFactory) cannot slip it past the guard.
+    GravitinoRuntimeException gre =
+        Assertions.assertThrows(
+            GravitinoRuntimeException.class,
+            () ->
+                JdbcUrlUtils.validateJdbcConfig(
+                    "testDriver",
+                    "jdbc:postgresql://localhost:0000/test",
+                    Collections.singletonMap("SocketFactory", "evil.Factory")));
+    Assertions.assertEquals(
+        "Unsafe PostgreSQL parameter 'socketFactory' detected in JDBC URL", gre.getMessage());
+  }
+
+  @Test
+  public void whenUnsafeParamConfigKeyForMariaDB_ShouldThrowGravitinoRuntimeException() {
+    // MariaDB routes through the same MySQL parameter list, so its key path must be guarded too.
+    GravitinoRuntimeException gre =
+        Assertions.assertThrows(
+            GravitinoRuntimeException.class,
+            () ->
+                JdbcUrlUtils.validateJdbcConfig(
+                    "testDriver",
+                    "jdbc:mariadb://localhost:0000/test",
+                    Collections.singletonMap("autoDeserialize", "true")));
+    Assertions.assertEquals(
+        "Unsafe MariaDB parameter 'autoDeserialize' detected in JDBC URL", gre.getMessage());
+  }
+
+  @Test
+  public void whenUnsafeParamAppearsOnlyAsConfigValue_ShouldBeAccepted() {
+    // The guard inspects only the URL and config keys, never values, so an unsafe parameter
+    // name appearing only as a config value (not a key) is accepted.
+    Assertions.assertDoesNotThrow(
+        () ->
+            JdbcUrlUtils.validateJdbcConfig(
+                "testDriver",
+                "jdbc:mysql://localhost:0000/test",
+                Collections.singletonMap("benignKey", "autoDeserialize")));
+  }
+
+  @Test
+  public void whenConfigMapHasNullKey_ShouldNotThrow() {
+    // A null key must be skipped, not dereferenced; no unsafe parameter is present here.
+    Assertions.assertDoesNotThrow(
+        () ->
+            JdbcUrlUtils.validateJdbcConfig(
+                "testDriver",
+                "jdbc:mysql://localhost:0000/test",
+                Collections.singletonMap(null, "true")));
   }
 
   @Test

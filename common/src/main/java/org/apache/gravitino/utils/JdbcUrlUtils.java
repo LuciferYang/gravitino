@@ -92,7 +92,7 @@ public class JdbcUrlUtils {
 
     for (String param : unsafeParams) {
       String lowerParam = param.toLowerCase();
-      if (lowerUrl.contains(lowerParam) || containsValueIgnoreCase(config, param)) {
+      if (lowerUrl.contains(lowerParam) || containsKeyIgnoreCase(config, param)) {
         throw new GravitinoRuntimeException(
             "Unsafe %s parameter '%s' detected in JDBC URL", dbType, param);
       }
@@ -116,9 +116,9 @@ public class JdbcUrlUtils {
     return decoded;
   }
 
-  private static boolean containsValueIgnoreCase(Map<String, String> map, String value) {
-    for (String keyValue : map.values()) {
-      if (keyValue != null && keyValue.equalsIgnoreCase(value)) {
+  private static boolean containsKeyIgnoreCase(Map<String, String> map, String key) {
+    for (String mapKey : map.keySet()) {
+      if (mapKey != null && mapKey.equalsIgnoreCase(key)) {
         return true;
       }
     }
