@@ -195,6 +195,7 @@ public abstract class BaseCatalog implements TableCatalog, SupportsNamespaces, F
   }
 
   @Override
+  @SuppressWarnings("deprecation") // Spark 4.0 deprecates this in favor of the Column[] overload.
   public Table createTable(
       Identifier ident, StructType schema, Transform[] transforms, Map<String, String> properties)
       throws TableAlreadyExistsException, NoSuchNamespaceException {

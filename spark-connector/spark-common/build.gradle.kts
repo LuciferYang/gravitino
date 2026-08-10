@@ -218,6 +218,14 @@ tasks.clean {
 }
 
 sourceSets {
+  named("main") {
+    java {
+      // Spark 3.x flavor of the version-incompatible classes (authz parser, Hive partition ops).
+      // The Spark 4.x flavor lives under src/main/spark4 and is compiled by the spark4-common
+      // module, which shares this module's src/main/java.
+      srcDir("src/main/spark3")
+    }
+  }
   named("test") {
     resources {
       exclude("**/*")

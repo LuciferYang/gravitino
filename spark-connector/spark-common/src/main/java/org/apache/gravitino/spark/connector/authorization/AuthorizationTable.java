@@ -125,6 +125,7 @@ public class AuthorizationTable implements Table, SupportsRead, SupportsWrite {
   }
 
   @Override
+  @SuppressWarnings("deprecation") // Spark 4.0 deprecates Table.schema() in favor of columns().
   public StructType schema() {
     return EMPTY_SCHEMA;
   }
