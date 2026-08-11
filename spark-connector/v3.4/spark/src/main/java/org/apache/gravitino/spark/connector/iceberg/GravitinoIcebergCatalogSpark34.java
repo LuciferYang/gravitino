@@ -18,12 +18,19 @@
  */
 package org.apache.gravitino.spark.connector.iceberg;
 
+import java.lang.reflect.InvocationTargetException;
 import org.apache.gravitino.spark.connector.SparkTableChangeConverter;
 import org.apache.gravitino.spark.connector.SparkTableChangeConverter34;
 import org.apache.gravitino.spark.connector.SparkTypeConverter;
 import org.apache.gravitino.spark.connector.SparkTypeConverter34;
+import org.apache.iceberg.spark.procedures.SparkProcedures;
+import org.apache.spark.sql.catalyst.analysis.NoSuchProcedureException;
+import org.apache.spark.sql.connector.catalog.Identifier;
+import org.apache.spark.sql.connector.iceberg.catalog.Procedure;
+import org.apache.spark.sql.connector.iceberg.catalog.ProcedureCatalog;
 
-public class GravitinoIcebergCatalogSpark34 extends GravitinoIcebergCatalog {
+public class GravitinoIcebergCatalogSpark34 extends GravitinoIcebergCatalog
+    implements ProcedureCatalog {
   @Override
   protected SparkTypeConverter getSparkTypeConverter() {
     return new SparkTypeConverter34();
@@ -33,5 +40,25 @@ public class GravitinoIcebergCatalogSpark34 extends GravitinoIcebergCatalog {
   protected SparkTableChangeConverter getSparkTableChangeConverter(
       SparkTypeConverter sparkTypeConverter) {
     return new SparkTableChangeConverter34(sparkTypeConverter);
+  }
+
+  @Override
+  public Procedure loadProcedure(Identifier identifier) throws NoSuchProcedureException {
+    String[] namespace = identifier.namespace();
+    String name = identifier.name();
+    try {
+      if (isSystemNamespace(namespace)) {
+        SparkProcedures.ProcedureBuilder builder = SparkProcedures.newBuilder(name);
+        if (builder != null) {
+          return builder.withTableCatalog(this).build();
+        }
+      }
+    } catch (NoSuchMethodException
+        | IllegalAccessException
+        | InvocationTargetException
+        | ClassNotFoundException e) {
+      throw new RuntimeException("Failed to load Iceberg Procedure " + identifier, e);
+    }
+    throw new NoSuchProcedureException(identifier);
   }
 }
