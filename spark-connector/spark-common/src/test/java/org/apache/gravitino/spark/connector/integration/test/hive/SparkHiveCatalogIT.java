@@ -191,7 +191,22 @@ public abstract class SparkHiveCatalogIT extends SparkCommonIT {
             () -> {
               sql("ALTER TABLE  " + tableName + " ADD PARTITION (age_p1=21, age_p2='twenty one')");
             });
-    Assertions.assertTrue(exception.getMessage().contains("Partition already exists"));
+    Assertions.assertTrue(
+        exception.getMessage().contains(getPartitionExistsErrorFragment()),
+        "Unexpected error message: " + exception.getMessage());
+  }
+
+  /**
+   * Returns a fragment of the error message raised when adding a partition that already exists.
+   *
+   * <p>Spark 3.x builds {@code PartitionAlreadyExistsException} from the message Gravitino reports,
+   * while Spark 4.0 removed that constructor and renders the message from its own {@code
+   * PARTITIONS_ALREADY_EXIST} error class, so the expected text differs per Spark line.
+   *
+   * @return the expected error message fragment.
+   */
+  protected String getPartitionExistsErrorFragment() {
+    return "Partition already exists";
   }
 
   @ParameterizedTest

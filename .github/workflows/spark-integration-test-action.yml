@@ -61,6 +61,11 @@ jobs:
           fi
           ./gradlew -PskipTests -PtestMode=${{ inputs.test-mode }} -PscalaVersion=${{ inputs.scala-version }} -PskipDockerTests=false -PskipWeb=true :spark-connector:spark-3.4:test --tests "org.apache.gravitino.spark.connector.integration.test.**"
           ./gradlew -PskipTests -PtestMode=${{ inputs.test-mode }} -PscalaVersion=${{ inputs.scala-version }} -PskipDockerTests=false -PskipWeb=true :spark-connector:spark-3.5:test --tests "org.apache.gravitino.spark.connector.integration.test.**"
+          # Spark 4.0 is Scala 2.13 only and needs JDK 17, and its modules hardcode 2.13 rather
+          # than reading -PscalaVersion. Run it once, from the 2.12 leg, without the override.
+          if [ "${{ inputs.scala-version }}" == "2.12" ] && [ "${{ inputs.java-version }}" == "17" ];then
+            ./gradlew -PskipTests -PtestMode=${{ inputs.test-mode }} -PskipDockerTests=false -PskipWeb=true :spark-connector:spark-4.0:test --tests "org.apache.gravitino.spark.connector.integration.test.**"
+          fi
 
       - name: Upload integrate tests reports
         uses: actions/upload-artifact@v7
@@ -72,5 +77,6 @@ jobs:
             spark-connector/v3.3/spark/build/spark-3.3-integration-test.log
             spark-connector/v3.4/spark/build/spark-3.4-integration-test.log
             spark-connector/v3.5/spark/build/spark-3.5-integration-test.log
+            spark-connector/v4.0/spark/build/spark-4.0-integration-test.log
             distribution/package/logs/*.out
             distribution/package/logs/*.log
