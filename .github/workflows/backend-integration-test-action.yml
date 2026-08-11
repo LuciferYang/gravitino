@@ -75,6 +75,8 @@ jobs:
             -x :spark-connector:spark-common:test \
             -x :spark-connector:spark-3.3:test -x :spark-connector:spark-3.4:test -x :spark-connector:spark-3.5:test \
             -x :spark-connector:spark-runtime-3.3:test -x :spark-connector:spark-runtime-3.4:test -x :spark-connector:spark-runtime-3.5:test \
+            -x :spark-connector:spark4-common:test \
+            -x :spark-connector:spark-4.0:test -x :spark-connector:spark-runtime-4.0:test \
             -x :trino-connector:integration-test:test -x :trino-connector:trino-connector:test \
             -x :iceberg:iceberg-rest-trino-it:test \
             -x :plugins:idp-basic:test \

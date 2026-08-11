@@ -116,6 +116,13 @@ project(":spark-connector:spark-3.4").projectDir = file("spark-connector/v3.4/sp
 project(":spark-connector:spark-runtime-3.4").projectDir = file("spark-connector/v3.4/spark-runtime")
 project(":spark-connector:spark-3.5").projectDir = file("spark-connector/v3.5/spark")
 project(":spark-connector:spark-runtime-3.5").projectDir = file("spark-connector/v3.5/spark-runtime")
+// Spark 4.0 support (#8771). spark4-common shares spark-common's sources compiled against Spark 4;
+// spark-4.0 holds the thin per-version catalog subclasses; spark-runtime-4.0 is the shaded jar.
+include("spark-connector:spark4-common")
+project(":spark-connector:spark4-common").projectDir = file("spark-connector/spark4-common")
+include("spark-connector:spark-4.0", "spark-connector:spark-runtime-4.0")
+project(":spark-connector:spark-4.0").projectDir = file("spark-connector/v4.0/spark")
+project(":spark-connector:spark-runtime-4.0").projectDir = file("spark-connector/v4.0/spark-runtime")
 include("web:web", "web:integration-test")
 include("web-v2:web", "web-v2:integration-test")
 include("docs")

@@ -38,6 +38,8 @@ public class CatalogNameAdaptor {
             .put(
                 "hive-3.5", "org.apache.gravitino.spark.connector.hive.GravitinoHiveCatalogSpark35")
             .put(
+                "hive-4.0", "org.apache.gravitino.spark.connector.hive.GravitinoHiveCatalogSpark40")
+            .put(
                 "lakehouse-iceberg-3.3",
                 "org.apache.gravitino.spark.connector.iceberg.GravitinoIcebergCatalogSpark33")
             .put(
@@ -46,6 +48,9 @@ public class CatalogNameAdaptor {
             .put(
                 "lakehouse-iceberg-3.5",
                 "org.apache.gravitino.spark.connector.iceberg.GravitinoIcebergCatalogSpark35")
+            .put(
+                "lakehouse-iceberg-4.0",
+                "org.apache.gravitino.spark.connector.iceberg.GravitinoIcebergCatalogSpark40")
             .put(
                 "lakehouse-paimon-3.3",
                 "org.apache.gravitino.spark.connector.paimon.GravitinoPaimonCatalogSpark33")
@@ -61,6 +66,8 @@ public class CatalogNameAdaptor {
                 "glue-3.4", "org.apache.gravitino.spark.connector.glue.GravitinoGlueCatalogSpark34")
             .put(
                 "glue-3.5", "org.apache.gravitino.spark.connector.glue.GravitinoGlueCatalogSpark35")
+            .put(
+                "glue-4.0", "org.apache.gravitino.spark.connector.glue.GravitinoGlueCatalogSpark40")
             .build();
   }
 
@@ -71,7 +78,9 @@ public class CatalogNameAdaptor {
           "3.4",
           "org.apache.gravitino.spark.connector.jdbc.GravitinoJdbcCatalogSpark34",
           "3.5",
-          "org.apache.gravitino.spark.connector.jdbc.GravitinoJdbcCatalogSpark35");
+          "org.apache.gravitino.spark.connector.jdbc.GravitinoJdbcCatalogSpark35",
+          "4.0",
+          "org.apache.gravitino.spark.connector.jdbc.GravitinoJdbcCatalogSpark40");
 
   private static final Map<String, String> pgCatalogNames =
       ImmutableMap.of(
@@ -80,7 +89,9 @@ public class CatalogNameAdaptor {
           "3.4",
           "org.apache.gravitino.spark.connector.jdbc.postgresql.GravitinoPostgreSqlCatalogSpark34",
           "3.5",
-          "org.apache.gravitino.spark.connector.jdbc.postgresql.GravitinoPostgreSqlCatalogSpark35");
+          "org.apache.gravitino.spark.connector.jdbc.postgresql.GravitinoPostgreSqlCatalogSpark35",
+          "4.0",
+          "org.apache.gravitino.spark.connector.jdbc.postgresql.GravitinoPostgreSqlCatalogSpark40");
 
   private static String sparkVersion() {
     return package$.MODULE$.SPARK_VERSION();
