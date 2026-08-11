@@ -75,6 +75,12 @@ public class TestSparkTypeConverter40 {
         SparkPartitionUtils.toGravitinoLiteral(row, 1, CharType.apply(5)).dataType());
   }
 
+  @Test
+  void testTimestampNTZOnSpark4() {
+    assertRoundTrip(Types.TimestampType.withoutTimeZone(), DataTypes.TimestampNTZType);
+    assertRoundTrip(Types.TimestampType.withTimeZone(), DataTypes.TimestampType);
+  }
+
   private void assertRoundTrip(Type gravitinoType, DataType sparkType) {
     Assertions.assertEquals(sparkType, sparkTypeConverter.toSparkType(gravitinoType));
     Assertions.assertEquals(gravitinoType, sparkTypeConverter.toGravitinoType(sparkType));
