@@ -30,14 +30,18 @@ import org.apache.gravitino.rel.expressions.literals.Literal;
 import org.apache.gravitino.rel.partitions.Partition;
 import org.apache.gravitino.rel.partitions.Partitions;
 import org.apache.spark.sql.catalyst.InternalRow;
-import org.apache.spark.sql.catalyst.analysis.PartitionAlreadyExistsException;
+import org.apache.spark.sql.catalyst.analysis.PartitionsAlreadyExistException;
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow;
 import org.apache.spark.sql.types.DataType;
 import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
 import org.jetbrains.annotations.NotNull;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class HiveGravitinoOperationOperator {
+
+  private static final Logger LOG = LoggerFactory.getLogger(HiveGravitinoOperationOperator.class);
 
   private org.apache.gravitino.rel.Table gravitinoTable;
   private static final String PARTITION_NAME_DELIMITER = "/";
@@ -49,7 +53,7 @@ public class HiveGravitinoOperationOperator {
 
   public void createPartition(
       InternalRow ident, Map<String, String> properties, StructType partitionSchema)
-      throws PartitionAlreadyExistsException {
+      throws PartitionsAlreadyExistException {
     List<String[]> fields = new ArrayList<>();
     List<Literal<?>> values = new ArrayList<>();
 
@@ -68,8 +72,13 @@ public class HiveGravitinoOperationOperator {
     try {
       gravitinoTable.supportPartitions().addPartition(partition);
     } catch (org.apache.gravitino.exceptions.PartitionAlreadyExistsException e) {
-      throw new org.apache.spark.sql.catalyst.analysis.PartitionAlreadyExistsException(
-          e.getMessage());
+      // Build the exception from (table, ident, schema) rather than forwarding Gravitino's message:
+      // that is the only constructor every supported Spark version offers, and it produces Spark's
+      // documented PARTITIONS_ALREADY_EXIST error class instead of an opaque message. Log the
+      // Gravitino-side detail here, since the constructor takes no cause and AnalysisException sets
+      // its own.
+      LOG.debug("Gravitino rejected addPartition for table {}", gravitinoTable.name(), e);
+      throw new PartitionsAlreadyExistException(gravitinoTable.name(), ident, partitionSchema);
     }
   }
 

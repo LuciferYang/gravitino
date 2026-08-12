@@ -25,7 +25,7 @@ plugins {
 }
 
 val scalaVersion: String = project.properties["scalaVersion"] as? String ?: extra["defaultScalaVersion"].toString()
-val fullSparkVersion: String = libs.versions.spark34.get()
+val fullSparkVersion: String = libs.versions.spark4tests.get()
 val sparkVersion = fullSparkVersion.split(".").take(2).joinToString(".")
 val hudiVersion = libs.versions.hudi.get()
 
