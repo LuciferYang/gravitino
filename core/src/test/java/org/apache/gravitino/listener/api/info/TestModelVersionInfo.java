@@ -21,6 +21,7 @@ package org.apache.gravitino.listener.api.info;
 import com.google.common.collect.ImmutableMap;
 import java.util.HashMap;
 import java.util.Map;
+import org.apache.gravitino.model.ModelVersion;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -42,15 +43,16 @@ public class TestModelVersionInfo {
   @Test
   public void testUrisAreDefensivelyCopied() {
     Map<String, String> uris = new HashMap<>();
-    uris.put("unknown", "gs://bucket/model/v1");
+    uris.put(ModelVersion.URI_NAME_UNKNOWN, "gs://bucket/model/v1");
     ModelVersionInfo info = new ModelVersionInfo(uris, null, null, null, null);
 
-    uris.put("unknown", "gs://bucket/model/MUTATED");
+    uris.put(ModelVersion.URI_NAME_UNKNOWN, "gs://bucket/model/MUTATED");
     uris.put("extra", "gs://bucket/model/EXTRA");
 
     // Event payloads are read-only; mutating the caller's map must not change them.
     Assertions.assertEquals(
-        ImmutableMap.of("unknown", "gs://bucket/model/v1"), ImmutableMap.copyOf(info.uris()));
+        ImmutableMap.of(ModelVersion.URI_NAME_UNKNOWN, "gs://bucket/model/v1"),
+        ImmutableMap.copyOf(info.uris()));
     Assertions.assertEquals("gs://bucket/model/v1", info.uri());
   }
 }
